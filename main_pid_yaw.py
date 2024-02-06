@@ -20,14 +20,15 @@ screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Enhanced Autonomous 4WS Car Simulation")
 
 # Display mode selection instructions
-font = pygame.font.Font(None, 36)
 screen.fill(WHITE)
+font = pygame.font.Font(None, 36)
 text = font.render("Press 'C' for Circle, 'R' for Random", True, BLACK)
 text_rect = text.get_rect(center=(screen_width/2, screen_height/2))
 screen.blit(text, text_rect)
 pygame.display.flip()
 
-mode_selection = 'circle'  # default
+# Mode selection loop
+mode_selection = 'circle'  # Default mode
 waiting_for_input = True
 while waiting_for_input:
     for event in pygame.event.get():
@@ -42,9 +43,7 @@ while waiting_for_input:
             pygame.quit()
             exit()
 
-# Initialize variables for path and car here
-circle_center = (screen_width // 2, screen_height // 2)
-radius = 100
+
 
 def generate_smooth_random_path(start_point, num_segments=5, segment_length=100):
     """
@@ -79,19 +78,35 @@ def generate_circle(cx, cy, radius, points=100):
 
 # Place path generation functions (generate_circle and generate_smooth_random_path) here
 
-if mode_selection == 'random':
-    current_path = generate_smooth_random_path((screen_width // 2, screen_height // 2), num_segments=10, segment_length=50)
-    path_mode = 'random'
-else:
-    current_path = generate_circle(circle_center[0], circle_center[1], radius)
-    path_mode = 'circle'
-
 
 def calculate_cte(car, circle_center, radius):
     dx = car.x - circle_center[0]
     dy = car.y - circle_center[1]
     distance = math.sqrt(dx**2 + dy**2)
     return distance - radius
+
+def find_lookahead_point(car, path, lookahead_distance):
+    for point in path:
+        dx = point[0] - car.x
+        dy = point[1] - car.y
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance >= lookahead_distance:
+            # Calculate angle to the lookahead point
+            angle_to_point = math.atan2(dy, dx)
+            # Calculate the steering angle needed
+            angle_diff = angle_to_point - car.yaw
+            # Normalize the angle difference
+            angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+            return angle_diff
+    return None
+
+def update_car_steering(car, path, lookahead_distance):
+    angle_diff = find_lookahead_point(car, path, lookahead_distance)
+    if angle_diff is not None:
+        car.front_wheel_angle = angle_diff  # Simplified, consider PID controller for smoothing
+        # Apply limits to the steering angle if necessary
+
 
 
 
@@ -121,7 +136,7 @@ class PIDController:
         return self.Kp * error + self.Ki * self.integral + self.Kd * derivative
 
 class Car:
-    def __init__(self, x, y, angle=0, velocity=30):
+    def __init__(self, x, y, angle=0, velocity=15):
         self.x = x
         self.y = y
         self.yaw = math.radians(angle)  # Convert to radians for consistency in calculations
@@ -132,10 +147,12 @@ class Car:
         self.length = 50  # Length of the car for drawing and dynamics
         self.width = 20  # Width of the car
 
+        self.max_steering_angle = math.radians(60)  # Maximum steering angle in radians
+
     def update(self, delta_time, cte):
         # PID control for front steering based on CTE
         steering_adjustment = self.pid_controller.update(cte, delta_time)
-        self.front_wheel_angle = steering_adjustment
+        self.front_wheel_angle = max(min(steering_adjustment, self.max_steering_angle), -self.max_steering_angle)
 
         # Simplified rear steering logic (for demonstration)
         # Adjusts rear steering based on velocity: counter-phase at low speeds, in-phase at high speeds
@@ -188,60 +205,52 @@ class Car:
 
         print(f"Front Angle: {self.front_wheel_angle}, Rear Angle: {self.rear_wheel_angle}")
 
-def generate_circle(cx, cy, radius, points=100):
-    """
-    Generates a list of points along the perimeter of a circle.
-    
-    :param cx: x-coordinate of the circle's center
-    :param cy: y-coordinate of the circle's center
-    :param radius: Radius of the circle
 
-car = Car(screen_width // 2, screen_height // 2 - radius)
-    :return: List of tuples, where each tuple represents the x and y coordinates of a point
-    """
-    circle = []
-    for i in range(points):
-        angle = 2 * math.pi * i / points
-        x = cx + radius * math.cos(angle)
-        y = cy + radius * math.sin(angle)
-        circle.append((x, y))
-    return circle
+# Initialize the car and path based on the selection
+car = Car(screen_width // 2, screen_height // 2, angle=0, velocity=30)
+if mode_selection == 'random':
+    current_path = generate_smooth_random_path((car.x, car.y), num_segments=10, segment_length=50)
+else:  # Default to a circle if not random
+    radius = 100
+    current_path = generate_circle(car.x, car.y, radius, points=100)
 
       
 
-# Main loop setup
+# Main simulation loop
 running = True
 clock = pygame.time.Clock()
-car = Car(screen_width // 2, screen_height // 2 - radius)
-
 while running:
-    delta_time = clock.tick(60) / 1000.0  # Convert to seconds
+    delta_time = clock.tick(60) / 1000.0  # Convert milliseconds to seconds
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
 
+    lookahead_distance = 50  # Adjust based on your simulation needs
 
+    # Within the simulation loop:
+    if mode_selection == 'random':
+        update_car_steering(car, current_path, lookahead_distance)
+    # Update car dynamics here...
 
-    # Calculate CTE for the circular path
-    cte = calculate_cte(car, circle_center, radius)
+    else:
+        # Existing CTE calculation for circular paths
+        dx = car.x - current_path[0][0]
+        dy = car.y - current_path[0][1]
+        cte = math.sqrt(dx**2 + dy**2) - radius
 
-    # Update the car's state based on the CTE
     car.update(delta_time, cte)
 
-    # Clear the screen
+    # Clear screen and draw everything
     screen.fill(WHITE)
-
-    # Draw the current path
-    if path_mode == 'circle':
-        pygame.draw.circle(screen, RED, circle_center, radius, 1)
-    else:  # Random path mode
+    if mode_selection == 'circle':
+        pygame.draw.circle(screen, RED, current_path[0], radius, 1)
+    else:
         for i in range(1, len(current_path)):
             pygame.draw.line(screen, RED, current_path[i - 1], current_path[i], 2)
-
-    # For simplicity, we'll update the car's movement here directly
-    # This should be replaced with your logic for following the path
-    cte = calculate_cte(car, circle_center, radius) if path_mode == 'circle' else 0  # Simplify for random path
-
-    car.update(delta_time, cte)
+    
     car.draw(screen)
-
     pygame.display.flip()
+
+pygame.quit()
 
 
