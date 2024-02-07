@@ -1,11 +1,10 @@
 import math
 import pygame
-
 from pid_controller import PIDController
-from constants import BLUE, RED, GREEN
+from constants import *
 
 class Car:
-    def __init__(self, x, y, angle=0, velocity=30):
+    def __init__(self, x, y, angle=0, velocity=15):
         self.x = x
         self.y = y
         self.yaw = math.radians(angle)  # Convert to radians for consistency in calculations
@@ -16,10 +15,12 @@ class Car:
         self.length = 50  # Length of the car for drawing and dynamics
         self.width = 20  # Width of the car
 
+        self.max_steering_angle = math.radians(60)  # Maximum steering angle in radians
+
     def update(self, delta_time, cte):
         # PID control for front steering based on CTE
         steering_adjustment = self.pid_controller.update(cte, delta_time)
-        self.front_wheel_angle = steering_adjustment
+        self.front_wheel_angle = max(min(steering_adjustment, self.max_steering_angle), -self.max_steering_angle)
 
         # Simplified rear steering logic (for demonstration)
         # Adjusts rear steering based on velocity: counter-phase at low speeds, in-phase at high speeds
