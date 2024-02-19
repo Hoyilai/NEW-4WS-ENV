@@ -28,12 +28,3 @@ To install the necessary libraries, run:
 
 ```bash
 pip install -r requirements.txt
-
-## Usage
-
-python main.py
-
-## Modules Description
-
-
-
