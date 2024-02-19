@@ -28,3 +28,17 @@ To install the necessary libraries, run:
 
 ```bash
 pip install -r requirements.txt
+
+
+## Usage
+
+```bash
+
+python main.py
+
+
+## Modules Description
+
+# Car Module
+
+Defines the Car class, simulating a car with traditional steering. It includes methods for updating car position and drawing the car on the screen.
