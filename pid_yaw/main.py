@@ -1,3 +1,4 @@
+
 import math
 from time import clock_getres
 import pygame
@@ -8,12 +9,24 @@ from path_generation import generate_circle, generate_smooth_random_path
 from pid_controller import PIDController
 
 
+
 # Initialize Pygame
 pygame.init()
 
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Enhanced Autonomous 4WS Car Simulation")
+
+# Lane definitions
+lane_width = 40
+lane_centers = [screen_height // 2 - lane_width, screen_height // 2, screen_height // 2 + lane_width]
+current_lane_index = 1  # Start in the middle lane
+
+
+def draw_lanes(screen):
+    for lane_center in lane_centers:
+        pygame.draw.line(screen, GREY, (0, lane_center), (screen_width, lane_center), 5)
+
 
 def set_wheel_angles_manually(car):
     print("Enter wheel angles in degrees (Front Left, Front Right, Rear Left, Rear Right):")
@@ -47,51 +60,41 @@ def handle_manual_control(car, event):
             car.front_right_wheel_angle += angle_increment
             car.rear_right_wheel_angle += angle_increment
 
-
+def handle_lane_change(car, event):
+    global current_lane_index
+    if event.key == pygame.K_a and current_lane_index > 0:  # Move to the left lane
+        current_lane_index -= 1
+    elif event.key == pygame.K_d and current_lane_index < len(lane_centers) - 1:  # Move to the right lane
+        current_lane_index += 1
+    car.y = lane_centers[current_lane_index]
 
 # Function to display mode selection options
 def display_mode_selection(screen):
-    screen.fill(WHITE)  # Clear the screen
-    font = pygame.font.Font(None, 36)  # Create a font object
-
-    # Render text for each mode
+    screen.fill(WHITE)
+    font = pygame.font.Font(None, 36)
     circle_text = font.render("Press '1' for Circle Mode", True, BLACK)
-    random_text = font.render("Press '2' for Random Trace Mode", True, BLACK)
-    manual_text = font.render("Press '3' for Manual Steering Mode", True, BLACK)
-
-    # Get rects for text positioning
-    circle_rect = circle_text.get_rect(center=(screen_width / 2, screen_height / 3))
-    random_rect = random_text.get_rect(center=(screen_width / 2, screen_height / 2))
-    manual_rect = manual_text.get_rect(center=(screen_width / 2, screen_height * 2 / 3))
-
-    # Blit (copy) text surfaces to the main screen surface
-    screen.blit(circle_text, circle_rect)
-    screen.blit(random_text, random_rect)
-    screen.blit(manual_text, manual_rect)
-
-    pygame.display.flip()  # Update the screen to show the text
+    manual_text = font.render("Press '2' for Manual Steering Mode", True, BLACK)
+    lane_change_text = font.render("Press '3' for Lane Change Mode", True, BLACK)
+    screen.blit(circle_text, (screen_width // 2 - circle_text.get_width() // 2, screen_height / 4))
+    screen.blit(manual_text, (screen_width // 2 - manual_text.get_width() // 2, screen_height / 2))
+    screen.blit(lane_change_text, (screen_width // 2 - lane_change_text.get_width() // 2, screen_height * 3 / 4))
+    pygame.display.flip()
 
 
-# Function to handle user input for mode selection
 def get_user_mode_selection(screen):
-    display_mode_selection(screen)  # Display the selection options
-    mode_selection = None  # Variable to store user's selection
-
-    while mode_selection is None:
+    display_mode_selection(screen)
+    while True:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
-                    mode_selection = 'circle'
+                    return 'circle'
                 elif event.key == pygame.K_2:
-                    mode_selection = 'random'
-                elif event.key == pygame.K_3:
-                    mode_selection = 'manual'
-            elif event.type == pygame.QUIT:
+                    return 'manual'
+                elif event.key is pygame.K_3:
+                    return 'lane_change'
+            elif event.type is pygame.QUIT:
                 pygame.quit()
                 exit()
-
-    return mode_selection
-
 
 def calculate_cte(car, circle_center, radius):
     dx = car.x - circle_center[0]
@@ -137,13 +140,6 @@ if mode_selection == 'circle':
 elif mode_selection == 'random':
     current_path = generate_smooth_random_path((car.x, car.y), num_segments=10, segment_length=50)
 
-# Initialize the car and path based on the selection
-car = Car(screen_width // 2, screen_height // 2, angle=0, velocity=30)
-if mode_selection == 'random':
-    current_path = generate_smooth_random_path((car.x, car.y), num_segments=10, segment_length=50)
-else:  # Default to a circle if not random
-    radius = 100
-    current_path = generate_circle(car.x, car.y, radius, points=100)
 
 if mode_selection == 'manual':
     car = Car_4ws(screen_width // 2, screen_height // 2)
@@ -154,23 +150,20 @@ else:
 # Main simulation loop
 running = True
 while running:
-    import pygame.time
-
-    clock = pygame.time.Clock()
-    delta_time = clock.tick(60) / 1000.0
+    delta_time = pygame.time.Clock().tick(60) / 1000.0
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
-        elif event.type == pygame.KEYDOWN and mode_selection == 'manual':
-            handle_manual_control(car, event)
+        elif event.type == pygame.KEYDOWN:
+            if mode_selection == 'manual' or mode_selection == 'lane_change':
+                handle_manual_control(car, event)
+                if mode_selection == 'lane_change':
+                    handle_lane_change(car, event)
 
     screen.fill(WHITE)
-    if mode_selection == 'circle':
-        pygame.draw.circle(screen, RED, current_path[0], radius, 1)
-    else:
-        for i in range(1, len(current_path)):
-            pygame.draw.line(screen, RED, current_path[i - 1], current_path[i], 2)
+    if mode_selection == 'lane_change':
+        draw_lanes(screen)
 
     lookahead_distance = 50  # Adjust based on your simulation needs
 
@@ -202,13 +195,6 @@ while running:
 
         car.update(delta_time)  # Update car's state with the new velocity and angles
 
-
-
-    # Within the simulation loop:
-    if mode_selection == 'random':
-        update_car_steering(car, current_path, lookahead_distance)
-    # Update car dynamics here...
-
     else:
         # Existing CTE calculation for circular paths
         dx = car.x - current_path[0][0]
@@ -229,5 +215,3 @@ while running:
     pygame.display.flip()
 
 pygame.quit()
-
-
